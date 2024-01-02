@@ -1,4 +1,4 @@
-A few of the popular cellular automatons implemented in Rust and visualized via [macroquad](https://macroquad.rs/).
+A few of the popular cellular automatons such as Conway's Game of Life and Brian's Brain implemented in Rust and visualized via [macroquad](https://macroquad.rs/).
 
 Optimized for readability and extensibility over performance.
 
