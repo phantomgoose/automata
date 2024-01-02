@@ -1,3 +1,7 @@
+mod conway;
+mod util;
+
+use conway::get_conway_next_cell_state;
 use macroquad::prelude::*;
 
 #[derive(Clone, Copy, PartialOrd, PartialEq, Debug)]
@@ -20,57 +24,9 @@ impl CellState {
 const ROWS: usize = 128;
 const COLUMNS: usize = 128;
 
-type SimState = [[CellState; COLUMNS]; ROWS];
+type SimulationState = [[CellState; COLUMNS]; ROWS];
 
-/// Fetches the number of cells of interest surrounding the current cell in the matrix
-fn get_cell_count<F>(state: &SimState, r: usize, c: usize, predicate: F) -> u8
-where
-    F: Fn(CellState) -> bool,
-{
-    let mut count = 0;
-
-    // up
-    if r > 0 && predicate(state[r - 1][c]) {
-        count += 1;
-    }
-
-    // up left
-    if r > 0 && c > 0 && predicate(state[r - 1][c - 1]) {
-        count += 1;
-    }
-
-    // up right
-    if r > 0 && c < COLUMNS - 1 && predicate(state[r - 1][c + 1]) {
-        count += 1;
-    }
-
-    // down
-    if r < ROWS - 1 && predicate(state[r + 1][c]) {
-        count += 1;
-    }
-
-    // down left
-    if r < ROWS - 1 && c > 0 && predicate(state[r + 1][c - 1]) {
-        count += 1;
-    }
-
-    // down right
-    if r < ROWS - 1 && c < COLUMNS - 1 && predicate(state[r + 1][c + 1]) {
-        count += 1;
-    }
-
-    // left
-    if c > 0 && predicate(state[r][c - 1]) {
-        count += 1;
-    }
-
-    // right
-    if c < COLUMNS - 1 && predicate(state[r][c + 1]) {
-        count += 1;
-    }
-
-    count
-}
+type CellStateGenerator = fn(&SimulationState, usize, usize) -> CellState;
 
 // brian's brain
 // TODO: convert to trait?
@@ -92,20 +48,17 @@ where
 //     }
 // }
 
-// Conway's game of life
-fn get_next_cell_state(state: &SimState, r: usize, c: usize) -> CellState {
-    // get count of surrounding cells of target type
-    let target_count = get_cell_count(state, r, c, |target| target == CellState::Alive);
-
-    if target_count < 2 || target_count > 3 {
-        return CellState::Dead;
+/// Given the starting simulation state, update the buffer using the supplied update func
+fn get_next_state(
+    state: &SimulationState,
+    buffer: &mut SimulationState,
+    update_func: CellStateGenerator,
+) {
+    for r in 0..state.len() {
+        for c in 0..state[r].len() {
+            buffer[r][c] = update_func(&state, r, c);
+        }
     }
-
-    if target_count == 3 {
-        return CellState::Alive;
-    }
-
-    state[r][c]
 }
 
 #[macroquad::main("Life")]
@@ -114,8 +67,8 @@ async fn main() {
     next_frame().await;
 
     // create a 2d array of size w * h
-    let mut state: SimState = [[CellState::Dead; COLUMNS]; ROWS];
-    let mut temp: SimState = [[CellState::Dead; COLUMNS]; ROWS];
+    let mut state: SimulationState = [[CellState::Dead; COLUMNS]; ROWS];
+    let mut temp: SimulationState = [[CellState::Dead; COLUMNS]; ROWS];
 
     assert_eq!(
         std::mem::size_of_val(&state),
@@ -162,11 +115,7 @@ async fn main() {
         }
 
         // update cell state
-        for r in 0..state.len() {
-            for c in 0..state[r].len() {
-                temp[r][c] = get_next_cell_state(&state, r, c);
-            }
-        }
+        get_next_state(&state, &mut temp, get_conway_next_cell_state);
 
         // render cell state
         for r in 0..temp.len() {
