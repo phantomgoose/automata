@@ -1,10 +1,11 @@
+use macroquad::prelude::*;
+
+use crate::brain::get_brain_next_cell_state;
+use crate::conway::get_conway_next_cell_state;
+
 mod brain;
 mod conway;
 mod util;
-
-use crate::brain::get_brain_next_cell_state;
-use conway::get_conway_next_cell_state;
-use macroquad::prelude::*;
 
 const ROWS: usize = 128;
 const COLUMNS: usize = 128;
@@ -16,11 +17,25 @@ enum CellState {
     Dead,
 }
 
+enum SimulationMode {
+    ConwayGameOfLife,
+    BrianBrain,
+}
+
+impl SimulationMode {
+    fn cell_state_fn(&self) -> CellStateGenerator {
+        match self {
+            SimulationMode::BrianBrain => get_brain_next_cell_state,
+            SimulationMode::ConwayGameOfLife => get_conway_next_cell_state,
+        }
+    }
+}
+
 impl CellState {
     fn color(&self) -> Color {
         match self {
-            CellState::Alive => GREEN,
-            CellState::Dying => ORANGE,
+            CellState::Alive => BLUE,
+            CellState::Dying => LIGHTGRAY,
             CellState::Dead => BLACK,
         }
     }
@@ -43,42 +58,69 @@ fn get_next_state(
     }
 }
 
+fn get_clear_sim_state() -> SimulationState {
+    [[CellState::Dead; COLUMNS]; ROWS]
+}
+
+fn generate_state_and_buffer() -> (SimulationState, SimulationState) {
+    let state = get_clear_sim_state();
+    let buffer = get_clear_sim_state();
+    assert_eq!(
+        std::mem::size_of_val(&state),
+        std::mem::size_of_val(&buffer),
+        "State and buffer matrices are not of the same size"
+    );
+
+    (state, buffer)
+}
+
+fn reset_sim_state(state: &mut SimulationState, buffer: &mut SimulationState) {
+    (*state, *buffer) = generate_state_and_buffer()
+}
+
+fn randomize_sim_state(state: &mut SimulationState, buffer: &mut SimulationState) {
+    reset_sim_state(state, buffer);
+    for r in 0..state.len() {
+        for c in 0..state.len() {
+            if rand::gen_range(0, 5) == 0 {
+                state[r][c] = CellState::Alive;
+            }
+        }
+    }
+}
+
+fn select_sim_mode(current_mode: &mut SimulationMode, new_mode: SimulationMode) {
+    *current_mode = new_mode;
+}
+
 #[macroquad::main("Life")]
 async fn main() {
     request_new_screen_size(1024., 1024.);
     next_frame().await;
 
     // create a 2d array of size w * h
-    let mut state: SimulationState = [[CellState::Dead; COLUMNS]; ROWS];
-    let mut temp: SimulationState = [[CellState::Dead; COLUMNS]; ROWS];
+    let (mut state, mut buffer) = generate_state_and_buffer();
 
-    assert_eq!(
-        std::mem::size_of_val(&state),
-        std::mem::size_of_val(&temp),
-        "State and temp matrices are not of the same size"
-    );
-
-    // init state
-    // for r in 0..state.len() {
-    //     for c in 0..state.len() {
-    //         if rand::gen_range(0, 5) == 0 {
-    //             state[r][c] = CellState::Alive;
-    //         }
-    //     }
-    // }
+    let mut mode = SimulationMode::ConwayGameOfLife;
 
     let desired_cell_size: f32 = screen_width() / COLUMNS as f32;
 
+    let instructions = vec![
+        "Controls:",
+        "R -> Clear",
+        "A -> Randomize",
+        "B -> Brian's Brain",
+        "C -> Conway's Game of Life",
+    ];
+
     // main simulation loop
     loop {
-        // clear_background(WHITE);
-
-        // break
+        // exit
         if is_key_pressed(KeyCode::Escape) {
             break;
         }
 
-        // spawn alive cells on mouse click
+        // spawn live cells on mouse click
         if is_mouse_button_down(MouseButton::Left) {
             let (x, y) = mouse_position();
             let column = (x / desired_cell_size) as usize;
@@ -94,28 +136,60 @@ async fn main() {
             }
         }
 
+        // reset the state
+        if is_key_pressed(KeyCode::R) {
+            reset_sim_state(&mut state, &mut buffer);
+        }
+
+        // randomize the state
+        if is_key_pressed(KeyCode::A) {
+            randomize_sim_state(&mut state, &mut buffer);
+        }
+
+        // select conway's game of life
+        if is_key_pressed(KeyCode::C) {
+            reset_sim_state(&mut state, &mut buffer);
+            randomize_sim_state(&mut state, &mut buffer);
+            select_sim_mode(&mut mode, SimulationMode::ConwayGameOfLife);
+        }
+
+        // select brian's brain
+        if is_key_pressed(KeyCode::B) {
+            reset_sim_state(&mut state, &mut buffer);
+            randomize_sim_state(&mut state, &mut buffer);
+            select_sim_mode(&mut mode, SimulationMode::BrianBrain);
+        }
+
         // update cell state
-        get_next_state(&state, &mut temp, get_brain_next_cell_state);
+        get_next_state(&state, &mut buffer, mode.cell_state_fn());
 
         // render cell state
-        for r in 0..temp.len() {
-            for c in 0..temp[r].len() {
-                let cell = temp[r][c];
+        for r in 0..buffer.len() {
+            for c in 0..buffer[r].len() {
+                let cell = buffer[r][c];
 
                 // update state
                 state[r][c] = cell;
 
-                // bg size - 1 px to create a nice juicy border
-                let curr_cell_size = desired_cell_size - 1.;
+                // size - 1 px to create a nice juicy border
+                let cell_size = desired_cell_size - 1.;
 
                 draw_rectangle(
-                    c as f32 * desired_cell_size + 1.,
-                    r as f32 * desired_cell_size + 1.,
-                    curr_cell_size,
-                    curr_cell_size,
+                    c as f32 * desired_cell_size,
+                    r as f32 * desired_cell_size,
+                    cell_size,
+                    cell_size,
                     cell.color(),
                 );
             }
+        }
+
+        let mut text_y = 25.;
+        let font_size = 24.;
+        let font_color = WHITE;
+        for instruction in &instructions {
+            draw_text(instruction, 25., text_y, font_size, font_color);
+            text_y += font_size + 5.;
         }
 
         next_frame().await
