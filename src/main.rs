@@ -7,8 +7,8 @@ mod brain;
 mod conway;
 mod util;
 
-const ROWS: usize = 128;
-const COLUMNS: usize = 128;
+const ROWS: usize = 512;
+const COLUMNS: usize = 512;
 
 #[derive(Clone, Copy, PartialOrd, PartialEq, Debug)]
 enum CellState {
@@ -111,6 +111,8 @@ async fn main() {
         "A -> Randomize",
         "B -> Brian's Brain",
         "C -> Conway's Game of Life",
+        "LMB -> Spawn Live Cells",
+        "ESC -> Quit",
     ];
 
     // main simulation loop
