@@ -23,7 +23,7 @@ const COLUMNS: usize = 128;
 type SimState = [[CellState; COLUMNS]; ROWS];
 
 /// Fetches the number of cells of interest surrounding the current cell in the matrix
-fn get_cell_count<F>(state: SimState, r: usize, c: usize, predicate: F) -> u8
+fn get_cell_count<F>(state: &SimState, r: usize, c: usize, predicate: F) -> u8
 where
     F: Fn(CellState) -> bool,
 {
@@ -93,7 +93,7 @@ where
 // }
 
 // Conway's game of life
-fn get_next_cell_state(state: SimState, r: usize, c: usize) -> CellState {
+fn get_next_cell_state(state: &SimState, r: usize, c: usize) -> CellState {
     // get count of surrounding cells of target type
     let target_count = get_cell_count(state, r, c, |target| target == CellState::Alive);
 
@@ -164,7 +164,7 @@ async fn main() {
         // update cell state
         for r in 0..state.len() {
             for c in 0..state[r].len() {
-                temp[r][c] = get_next_cell_state(state, r, c);
+                temp[r][c] = get_next_cell_state(&state, r, c);
             }
         }
 
@@ -178,14 +178,6 @@ async fn main() {
 
                 // bg size - 1 px to create a nice juicy border
                 let curr_cell_size = desired_cell_size - 1.;
-
-                draw_rectangle(
-                    c as f32 * desired_cell_size,
-                    r as f32 * desired_cell_size,
-                    desired_cell_size,
-                    desired_cell_size,
-                    BLACK,
-                );
 
                 draw_rectangle(
                     c as f32 * desired_cell_size + 1.,
