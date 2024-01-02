@@ -103,7 +103,7 @@ fn randomize_sim_state(state: &mut SimulationState, buffer: &mut SimulationState
     }
 }
 
-#[macroquad::main("Life")]
+#[macroquad::main("Automata")]
 async fn main() {
     // set window size
     request_new_screen_size(1024., 1024.);
