@@ -1,13 +1,18 @@
+mod brain;
 mod conway;
 mod util;
 
+use crate::brain::get_brain_next_cell_state;
 use conway::get_conway_next_cell_state;
 use macroquad::prelude::*;
+
+const ROWS: usize = 128;
+const COLUMNS: usize = 128;
 
 #[derive(Clone, Copy, PartialOrd, PartialEq, Debug)]
 enum CellState {
     Alive,
-    // Dying,
+    Dying,
     Dead,
 }
 
@@ -15,38 +20,15 @@ impl CellState {
     fn color(&self) -> Color {
         match self {
             CellState::Alive => GREEN,
-            // CellState::Dying => ORANGE,
+            CellState::Dying => ORANGE,
             CellState::Dead => BLACK,
         }
     }
 }
 
-const ROWS: usize = 128;
-const COLUMNS: usize = 128;
-
 type SimulationState = [[CellState; COLUMNS]; ROWS];
 
 type CellStateGenerator = fn(&SimulationState, usize, usize) -> CellState;
-
-// brian's brain
-// TODO: convert to trait?
-// fn get_next_cell_state(state: SimState, r: usize, c: usize) -> CellState {
-//     if state[r][c] == CellState::Alive {
-//         return CellState::Dying;
-//     }
-//
-//     if state[r][c] == CellState::Dying {
-//         return CellState::Dead;
-//     }
-//
-//     // get count of surrounding cells of target type
-//     let target_count = get_cell_count(state, r, c, |target| target == CellState::Alive);
-//     if target_count == 2 {
-//         CellState::Alive
-//     } else {
-//         CellState::Dead
-//     }
-// }
 
 /// Given the starting simulation state, update the buffer using the supplied update func
 fn get_next_state(
@@ -106,16 +88,14 @@ async fn main() {
             if (row > 0 && row < ROWS - 1) && (column > 0 && column < COLUMNS - 1) {
                 state[row][column] = CellState::Alive;
 
-                state[row - 1][column] = CellState::Alive;
                 state[row + 1][column] = CellState::Alive;
-
-                state[row][column - 1] = CellState::Alive;
                 state[row][column + 1] = CellState::Alive;
+                state[row + 1][column + 1] = CellState::Alive;
             }
         }
 
         // update cell state
-        get_next_state(&state, &mut temp, get_conway_next_cell_state);
+        get_next_state(&state, &mut temp, get_brain_next_cell_state);
 
         // render cell state
         for r in 0..temp.len() {
