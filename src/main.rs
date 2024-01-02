@@ -9,34 +9,47 @@ mod util;
 
 const ROWS: usize = 256;
 const COLUMNS: usize = 256;
+const FONT_SIZE: f32 = 24.;
+const FONT_COLOR: Color = WHITE;
+const INSTRUCTIONS: [&str; 7] = [
+    "Controls:",
+    "R -> Clear",
+    "A -> Randomize",
+    "B -> Brian's Brain",
+    "C -> Conway's Game of Life",
+    "LMB -> Spawn Live Cells",
+    "ESC -> Quit",
+];
 
-#[derive(Clone, Copy, PartialOrd, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum CellState {
     Alive,
     Dying,
     Dead,
 }
 
+impl CellState {
+    fn color(&self) -> Color {
+        match self {
+            CellState::Alive => GREEN,
+            CellState::Dying => LIGHTGRAY,
+            CellState::Dead => BLACK,
+        }
+    }
+}
+
+#[derive(Default)]
 enum SimulationMode {
-    ConwayGameOfLife,
-    BrianBrain,
+    #[default]
+    ConwaysLife,
+    BriansBrain,
 }
 
 impl SimulationMode {
     fn cell_state_fn(&self) -> CellStateGenerator {
         match self {
-            SimulationMode::BrianBrain => get_brain_next_cell_state,
-            SimulationMode::ConwayGameOfLife => get_conway_next_cell_state,
-        }
-    }
-}
-
-impl CellState {
-    fn color(&self) -> Color {
-        match self {
-            CellState::Alive => BLUE,
-            CellState::Dying => LIGHTGRAY,
-            CellState::Dead => BLACK,
+            SimulationMode::BriansBrain => get_brain_next_cell_state,
+            SimulationMode::ConwaysLife => get_conway_next_cell_state,
         }
     }
 }
@@ -45,7 +58,7 @@ type SimulationState = [[CellState; COLUMNS]; ROWS];
 
 type CellStateGenerator = fn(&SimulationState, usize, usize) -> CellState;
 
-/// Given the starting simulation state, update the buffer using the supplied update func
+/// Given the starting simulation state, update each cell in the buffer using the supplied update func
 fn get_next_state(
     state: &SimulationState,
     buffer: &mut SimulationState,
@@ -58,13 +71,9 @@ fn get_next_state(
     }
 }
 
-fn get_clear_sim_state() -> SimulationState {
-    [[CellState::Dead; COLUMNS]; ROWS]
-}
-
-fn generate_state_and_buffer() -> (SimulationState, SimulationState) {
-    let state = get_clear_sim_state();
-    let buffer = get_clear_sim_state();
+fn get_clean_state() -> (SimulationState, SimulationState) {
+    let state = [[CellState::Dead; COLUMNS]; ROWS];
+    let buffer = [[CellState::Dead; COLUMNS]; ROWS];
     assert_eq!(
         std::mem::size_of_val(&state),
         std::mem::size_of_val(&buffer),
@@ -75,9 +84,10 @@ fn generate_state_and_buffer() -> (SimulationState, SimulationState) {
 }
 
 fn reset_sim_state(state: &mut SimulationState, buffer: &mut SimulationState) {
-    (*state, *buffer) = generate_state_and_buffer()
+    (*state, *buffer) = get_clean_state()
 }
 
+/// Randomly sets cells in the starting state to [CellState::Alive]
 fn randomize_sim_state(state: &mut SimulationState, buffer: &mut SimulationState) {
     reset_sim_state(state, buffer);
     for r in 0..state.len() {
@@ -89,31 +99,18 @@ fn randomize_sim_state(state: &mut SimulationState, buffer: &mut SimulationState
     }
 }
 
-fn select_sim_mode(current_mode: &mut SimulationMode, new_mode: SimulationMode) {
-    *current_mode = new_mode;
-}
-
 #[macroquad::main("Life")]
 async fn main() {
+    // set window size
     request_new_screen_size(1024., 1024.);
     next_frame().await;
 
-    // create a 2d array of size w * h
-    let (mut state, mut buffer) = generate_state_and_buffer();
+    // create initial state and a buffer to hold updated state between frames
+    let (mut state, mut buffer) = get_clean_state();
 
-    let mut mode = SimulationMode::ConwayGameOfLife;
+    let mut simulation_mode = SimulationMode::ConwaysLife;
 
-    let desired_cell_size: f32 = screen_width() / COLUMNS as f32;
-
-    let instructions = vec![
-        "Controls:",
-        "R -> Clear",
-        "A -> Randomize",
-        "B -> Brian's Brain",
-        "C -> Conway's Game of Life",
-        "LMB -> Spawn Live Cells",
-        "ESC -> Quit",
-    ];
+    let cell_width: f32 = screen_width() / COLUMNS as f32;
 
     // main simulation loop
     loop {
@@ -125,13 +122,13 @@ async fn main() {
         // spawn live cells on mouse click
         if is_mouse_button_down(MouseButton::Left) {
             let (x, y) = mouse_position();
-            let column = (x / desired_cell_size) as usize;
-            let row = (y / desired_cell_size) as usize;
+            let row = (y / cell_width) as usize;
+            let column = (x / cell_width) as usize;
 
             // bounds check
             if (row > 0 && row < ROWS - 1) && (column > 0 && column < COLUMNS - 1) {
+                // spawn a square around the mouse pointer - works well for the supported sims
                 state[row][column] = CellState::Alive;
-
                 state[row + 1][column] = CellState::Alive;
                 state[row][column + 1] = CellState::Alive;
                 state[row + 1][column + 1] = CellState::Alive;
@@ -152,20 +149,20 @@ async fn main() {
         if is_key_pressed(KeyCode::C) {
             reset_sim_state(&mut state, &mut buffer);
             randomize_sim_state(&mut state, &mut buffer);
-            select_sim_mode(&mut mode, SimulationMode::ConwayGameOfLife);
+            simulation_mode = SimulationMode::ConwaysLife;
         }
 
         // select brian's brain
         if is_key_pressed(KeyCode::B) {
             reset_sim_state(&mut state, &mut buffer);
             randomize_sim_state(&mut state, &mut buffer);
-            select_sim_mode(&mut mode, SimulationMode::BrianBrain);
+            simulation_mode = SimulationMode::BriansBrain;
         }
 
-        // update cell state
-        get_next_state(&state, &mut buffer, mode.cell_state_fn());
+        // write updated cell state for the next frame to buffer, based on the currently selected simulation mode
+        get_next_state(&state, &mut buffer, simulation_mode.cell_state_fn());
 
-        // render cell state
+        // render the cell state and store buffer in the state
         for r in 0..buffer.len() {
             for c in 0..buffer[r].len() {
                 let cell = buffer[r][c];
@@ -174,11 +171,11 @@ async fn main() {
                 state[r][c] = cell;
 
                 // size - 1 px to create a nice juicy border
-                let cell_size = desired_cell_size - 1.;
+                let cell_size = cell_width - 1.;
 
                 draw_rectangle(
-                    c as f32 * desired_cell_size,
-                    r as f32 * desired_cell_size,
+                    c as f32 * cell_width + 0.5,
+                    r as f32 * cell_width + 0.5,
                     cell_size,
                     cell_size,
                     cell.color(),
@@ -187,11 +184,9 @@ async fn main() {
         }
 
         let mut text_y = 25.;
-        let font_size = 24.;
-        let font_color = WHITE;
-        for instruction in &instructions {
-            draw_text(instruction, 25., text_y, font_size, font_color);
-            text_y += font_size + 5.;
+        for instruction in &INSTRUCTIONS {
+            draw_text(instruction, 25., text_y, FONT_SIZE, FONT_COLOR);
+            text_y += FONT_SIZE + 5.;
         }
 
         next_frame().await

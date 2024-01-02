@@ -1,18 +1,20 @@
-use crate::util::get_cell_count;
+use crate::util::count_cells;
 use crate::{CellState, SimulationState};
 
-// Conway's game of life
-pub fn get_conway_next_cell_state(state: &SimulationState, r: usize, c: usize) -> CellState {
-    // get count of surrounding cells of target type
-    let target_count = get_cell_count(state, r, c, |target| target == CellState::Alive);
+// Conway's Game of Life
+pub fn get_conway_next_cell_state(state: &SimulationState, row: usize, column: usize) -> CellState {
+    let live_cell_count = count_cells(state, row, column, |cell| cell == CellState::Alive);
 
-    if target_count < 2 || target_count > 3 {
+    // underpopulated or overpopulated
+    if live_cell_count < 2 || live_cell_count > 3 {
         return CellState::Dead;
     }
 
-    if target_count == 3 {
+    // just right 👌
+    if live_cell_count == 3 {
         return CellState::Alive;
     }
 
-    state[r][c]
+    // unchanged otherwise
+    state[row][column]
 }

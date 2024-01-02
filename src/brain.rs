@@ -1,18 +1,20 @@
-use crate::util::get_cell_count;
+use crate::util::count_cells;
 use crate::{CellState, SimulationState};
 
-// brian's brain
-pub fn get_brain_next_cell_state(state: &SimulationState, r: usize, c: usize) -> CellState {
-    if state[r][c] == CellState::Alive {
+// Brian's Brain
+pub fn get_brain_next_cell_state(state: &SimulationState, row: usize, column: usize) -> CellState {
+    // live cells begin dying
+    if state[row][column] == CellState::Alive {
         return CellState::Dying;
     }
 
-    if state[r][c] == CellState::Dying {
+    // dying cells die
+    if state[row][column] == CellState::Dying {
         return CellState::Dead;
     }
 
-    // get count of surrounding cells of target type
-    let target_count = get_cell_count(state, r, c, |target| target == CellState::Alive);
+    // if there are
+    let target_count = count_cells(state, row, column, |target| target == CellState::Alive);
     if target_count == 2 {
         CellState::Alive
     } else {
