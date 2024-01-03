@@ -118,8 +118,8 @@ async fn main() {
 
     // main simulation loop
     loop {
-        // exit
-        if is_key_pressed(KeyCode::Escape) {
+        // exit (if not wasm)
+        if is_key_pressed(KeyCode::Escape) && cfg!(target_arch != "wasm32") {
             break;
         }
 
