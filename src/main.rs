@@ -11,6 +11,7 @@ mod util;
 const ROWS: usize = 256;
 const COLUMNS: usize = 256;
 const FONT_SIZE: f32 = 24.;
+const TEXT_PADDING: f32 = 25.;
 const FONT_COLOR: Color = WHITE;
 const INSTRUCTIONS: [&str; 7] = [
     "Controls:",
@@ -119,7 +120,7 @@ async fn main() {
     // main simulation loop
     loop {
         // exit (if not wasm)
-        if is_key_pressed(KeyCode::Escape) && cfg!(target_arch != "wasm32") {
+        if is_key_pressed(KeyCode::Escape) && !cfg!(target_arch = "wasm32") {
             break;
         }
 
@@ -166,10 +167,17 @@ async fn main() {
         // write updated cell state for the next frame to buffer, based on the currently selected simulation mode
         get_next_state(&state, &mut buffer, simulation_mode.cell_state_fn());
 
+        // keep track of how many cells are alive
+        let mut live_cell_count = 0;
+
         // render the cell state and store buffer in the state
         for r in 0..buffer.len() {
             for c in 0..buffer[r].len() {
                 let cell = buffer[r][c];
+
+                if cell == CellState::Alive {
+                    live_cell_count += 1;
+                }
 
                 // update state
                 state[r][c] = cell;
@@ -189,9 +197,17 @@ async fn main() {
 
         let mut text_y = 25.;
         for instruction in &INSTRUCTIONS {
-            draw_text(instruction, 25., text_y, FONT_SIZE, FONT_COLOR);
+            draw_text(instruction, TEXT_PADDING, text_y, FONT_SIZE, FONT_COLOR);
             text_y += FONT_SIZE + 5.;
         }
+
+        draw_text(
+            format!("Cells alive: {}", live_cell_count).as_str(),
+            TEXT_PADDING,
+            text_y,
+            FONT_SIZE,
+            FONT_COLOR,
+        );
 
         next_frame().await
     }
