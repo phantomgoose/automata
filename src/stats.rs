@@ -3,34 +3,41 @@ use std::collections::VecDeque;
 use macroquad::color::{Color, LIGHTGRAY, WHITE};
 use macroquad::shapes::{draw_line, draw_rectangle};
 
-const BUCKET_SIZE_SECS: f32 = 0.1;
-const CHART_MAX_SECONDS: usize = 10;
-const MAX_BUCKET_COUNT: usize = CHART_MAX_SECONDS * (1. / BUCKET_SIZE_SECS) as usize;
+const BUCKET_SIZE_MILLISECONDS: i32 = 100;
+const CHART_WINDOW_SECONDS: usize = 10;
+const BUCKET_COUNT: usize = CHART_WINDOW_SECONDS * (1000 / BUCKET_SIZE_MILLISECONDS) as usize;
+const CHART_HEIGHT: f32 = 50.;
+const CHART_WIDTH: f32 = BUCKET_COUNT as f32;
+// 1 pixel per bucket
+const CHART_BORDER_COLOR: Color = LIGHTGRAY;
+const CHART_BORDER_THICCNESS: f32 = 1.;
+const CHART_LINE_COLOR: Color = WHITE;
+const CHART_LINE_THICCNESS: f32 = 1.;
 
 pub struct DataPoint {
-    timestamp_ms: f32,
-    value: i32,
+    timestamp_millis: i32,
+    value: f32,
 }
 
 impl DataPoint {
-    pub fn new(timestamp_ms: f32, value: i32) -> Self {
+    pub fn new(timestamp_millis: i32, value: f32) -> Self {
         Self {
-            timestamp_ms,
+            timestamp_millis,
             value,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct DataPointBucket {
-    first_ts_ms: f32,
-    sum: i32,
+    clamped_timestamp_millis: i32,
+    sum: f32,
     count: i32,
 }
 
 impl DataPointBucket {
     fn avg(&self) -> f32 {
-        (self.sum as f32) / (self.count as f32)
+        self.sum / (self.count as f32)
     }
 
     fn store(&mut self, point: &DataPoint) {
@@ -42,12 +49,16 @@ impl DataPointBucket {
 impl From<DataPoint> for DataPointBucket {
     fn from(dp: DataPoint) -> Self {
         let DataPoint {
-            timestamp_ms,
+            timestamp_millis,
             value,
         } = dp;
 
+        // round down to nearest bucket size in milliseconds
+        let clamped_timestamp_millis =
+            (timestamp_millis / BUCKET_SIZE_MILLISECONDS) * BUCKET_SIZE_MILLISECONDS;
+
         Self {
-            first_ts_ms: timestamp_ms,
+            clamped_timestamp_millis,
             sum: value,
             count: 1,
         }
@@ -73,26 +84,28 @@ impl TimeSeries {
         let last_bucket = self.series.iter_mut().last();
         if last_bucket.is_none() {
             // no elements added yet
-            self.series.push_back(data_point.into());
+            self.series.push_back(DataPointBucket::from(data_point));
             return;
         }
 
         // check if new ts is within X millis of the first value in the bucket
         let last_bucket = last_bucket.expect("Bucket should not be None at this point");
 
-        let bucket_start_ts = last_bucket.first_ts_ms;
+        let bucket_start_ts = last_bucket.clamped_timestamp_millis;
 
-        let DataPoint { timestamp_ms, .. } = data_point;
+        let DataPoint {
+            timestamp_millis, ..
+        } = data_point;
         assert!(
-            timestamp_ms > bucket_start_ts,
+            timestamp_millis >= bucket_start_ts,
             "Only chronologically ordered points are supported."
         );
 
-        let time_diff = timestamp_ms - last_bucket.first_ts_ms;
+        let time_diff = timestamp_millis - bucket_start_ts;
 
         // if the new point falls outside the last bucket, append a new bucket
-        if time_diff > BUCKET_SIZE_SECS {
-            self.series.push_back(data_point.into());
+        if time_diff >= BUCKET_SIZE_MILLISECONDS {
+            self.series.push_back(DataPointBucket::from(data_point));
         }
         // otherwise store the new point in the last bucket
         else {
@@ -100,19 +113,12 @@ impl TimeSeries {
         }
 
         // remove old buckets
-        while self.series.len() > MAX_BUCKET_COUNT {
+        while self.series.len() > BUCKET_COUNT {
             self.series.pop_front();
         }
     }
 
     pub fn display(&self, x: f32, y: f32) {
-        const CHART_HEIGHT: f32 = 50.;
-        const CHART_WIDTH: f32 = MAX_BUCKET_COUNT as f32; // 1 pixel per bucket
-        const BORDER_COLOR: Color = LIGHTGRAY;
-        const BORDER_THICCNESS: f32 = 1.;
-        const LINE_COLOR: Color = WHITE;
-        const LINE_THICCNESS: f32 = 1.5;
-
         // x, y is the upper left corner
 
         // draw border
@@ -121,18 +127,18 @@ impl TimeSeries {
             x,
             y,
             x,
-            y + CHART_HEIGHT + LINE_THICCNESS,
-            BORDER_THICCNESS,
-            BORDER_COLOR,
+            y + CHART_HEIGHT + CHART_LINE_THICCNESS,
+            CHART_BORDER_THICCNESS,
+            CHART_BORDER_COLOR,
         );
         // bottom
         draw_line(
             x,
-            y + CHART_HEIGHT + LINE_THICCNESS,
+            y + CHART_HEIGHT + CHART_LINE_THICCNESS,
             x + CHART_WIDTH,
-            y + CHART_HEIGHT + LINE_THICCNESS,
-            BORDER_THICCNESS,
-            BORDER_COLOR,
+            y + CHART_HEIGHT + CHART_LINE_THICCNESS,
+            CHART_BORDER_THICCNESS,
+            CHART_BORDER_COLOR,
         );
 
         // draw the averages
@@ -151,10 +157,73 @@ impl TimeSeries {
             draw_rectangle(
                 x + idx as f32,
                 y + (CHART_HEIGHT - point_height),
-                LINE_THICCNESS,
-                LINE_THICCNESS,
-                LINE_COLOR,
+                CHART_LINE_THICCNESS,
+                CHART_LINE_THICCNESS,
+                CHART_LINE_COLOR,
             );
         }
+    }
+}
+
+// tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn time_series_records_points() {
+        let mut ts = TimeSeries::new();
+        ts.record(DataPoint::new(0, 1.));
+        ts.record(DataPoint::new(100, 2.));
+        ts.record(DataPoint::new(200, 3.));
+
+        assert_eq!(
+            ts.series,
+            VecDeque::from(vec![
+                DataPointBucket {
+                    clamped_timestamp_millis: 0,
+                    sum: 1.,
+                    count: 1,
+                },
+                DataPointBucket {
+                    clamped_timestamp_millis: 100,
+                    sum: 2.,
+                    count: 1,
+                },
+                DataPointBucket {
+                    clamped_timestamp_millis: 200,
+                    sum: 3.,
+                    count: 1,
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn time_series_handles_same_bucket_points() {
+        let mut ts = TimeSeries::new();
+        ts.record(DataPoint::new(0, 1.));
+        ts.record(DataPoint::new(50, 2.));
+        ts.record(DataPoint::new(75, 3.));
+
+        assert_eq!(
+            ts.series,
+            VecDeque::from(vec![DataPointBucket {
+                clamped_timestamp_millis: 0,
+                sum: 6.,
+                count: 3,
+            },])
+        );
+    }
+
+    #[test]
+    fn time_series_is_finite() {
+        let mut ts = TimeSeries::new();
+
+        for idx in 0..(BUCKET_COUNT + 1000) {
+            ts.record(DataPoint::new(idx as i32 * BUCKET_SIZE_MILLISECONDS, 1.));
+        }
+
+        assert_eq!(ts.series.len(), BUCKET_COUNT);
     }
 }

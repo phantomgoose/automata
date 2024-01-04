@@ -129,7 +129,7 @@ async fn main() {
     let cell_width: f32 = screen_width() / COLUMNS as f32;
 
     let mut time_series = TimeSeries::new();
-    let mut timestamp = 0.;
+    let mut timestamp_secs = 0.;
 
     // main simulation loop
     loop {
@@ -225,8 +225,11 @@ async fn main() {
         }
 
         // draw a pretty chart
-        timestamp += get_frame_time();
-        time_series.record(DataPoint::new(timestamp, live_cell_count));
+        timestamp_secs += get_frame_time();
+        time_series.record(DataPoint::new(
+            (timestamp_secs * 1000.) as i32,
+            live_cell_count as f32,
+        ));
         time_series.display(TEXT_PADDING, text_y);
 
         next_frame().await
