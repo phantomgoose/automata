@@ -78,14 +78,11 @@ impl TimeSeries {
         }
 
         // check if new ts is within X millis of the first value in the bucket
-        let mut last_bucket = last_bucket.expect("Bucket should not be None at this point");
+        let last_bucket = last_bucket.expect("Bucket should not be None at this point");
 
         let bucket_start_ts = last_bucket.first_ts_ms;
 
-        let DataPoint {
-            timestamp_ms,
-            value,
-        } = data_point;
+        let DataPoint { timestamp_ms, .. } = data_point;
         assert!(
             timestamp_ms > bucket_start_ts,
             "Only chronologically ordered points are supported."
@@ -114,19 +111,26 @@ impl TimeSeries {
         const BORDER_COLOR: Color = LIGHTGRAY;
         const BORDER_THICCNESS: f32 = 1.;
         const LINE_COLOR: Color = WHITE;
-        const LINE_THICCNESS: f32 = 1.75;
+        const LINE_THICCNESS: f32 = 1.5;
 
         // x, y is the upper left corner
 
         // draw border
         // left side
-        draw_line(x, y, x, y + CHART_HEIGHT, BORDER_THICCNESS, BORDER_COLOR);
+        draw_line(
+            x,
+            y,
+            x,
+            y + CHART_HEIGHT + LINE_THICCNESS,
+            BORDER_THICCNESS,
+            BORDER_COLOR,
+        );
         // bottom
         draw_line(
             x,
-            y + CHART_HEIGHT,
+            y + CHART_HEIGHT + LINE_THICCNESS,
             x + CHART_WIDTH,
-            y + CHART_HEIGHT,
+            y + CHART_HEIGHT + LINE_THICCNESS,
             BORDER_THICCNESS,
             BORDER_COLOR,
         );
@@ -147,8 +151,8 @@ impl TimeSeries {
             draw_rectangle(
                 x + idx as f32,
                 y + (CHART_HEIGHT - point_height),
-                1.,
-                1.,
+                LINE_THICCNESS,
+                LINE_THICCNESS,
                 LINE_COLOR,
             );
         }
