@@ -90,13 +90,22 @@ fn get_clean_state() -> (SimulationState, SimulationState) {
     (state, buffer)
 }
 
-fn reset_sim_state(state: &mut SimulationState, buffer: &mut SimulationState) {
+fn reset_sim_state(
+    state: &mut SimulationState,
+    buffer: &mut SimulationState,
+    time_series: &mut TimeSeries,
+) {
+    time_series.reset();
     (*state, *buffer) = get_clean_state()
 }
 
 /// Randomly sets cells in the starting state to [CellState::Alive]
-fn randomize_sim_state(state: &mut SimulationState, buffer: &mut SimulationState) {
-    reset_sim_state(state, buffer);
+fn randomize_sim_state(
+    state: &mut SimulationState,
+    buffer: &mut SimulationState,
+    time_series: &mut TimeSeries,
+) {
+    reset_sim_state(state, buffer, time_series);
     for r in 0..state.len() {
         for c in 0..state.len() {
             if rand::gen_range(0, 5) == 0 {
@@ -119,7 +128,7 @@ async fn main() {
 
     let cell_width: f32 = screen_width() / COLUMNS as f32;
 
-    let mut timeseries = TimeSeries::new();
+    let mut time_series = TimeSeries::new();
     let mut timestamp = 0.;
 
     // main simulation loop
@@ -147,26 +156,23 @@ async fn main() {
 
         // reset the state
         if is_key_pressed(KeyCode::R) {
-            reset_sim_state(&mut state, &mut buffer);
-            timeseries.reset();
+            reset_sim_state(&mut state, &mut buffer, &mut time_series);
         }
 
         // randomize the state
         if is_key_pressed(KeyCode::A) {
-            randomize_sim_state(&mut state, &mut buffer);
+            randomize_sim_state(&mut state, &mut buffer, &mut time_series);
         }
 
         // select conway's game of life
         if is_key_pressed(KeyCode::C) {
-            reset_sim_state(&mut state, &mut buffer);
-            randomize_sim_state(&mut state, &mut buffer);
+            randomize_sim_state(&mut state, &mut buffer, &mut time_series);
             simulation_mode = SimulationMode::ConwaysLife;
         }
 
         // select brian's brain
         if is_key_pressed(KeyCode::B) {
-            reset_sim_state(&mut state, &mut buffer);
-            randomize_sim_state(&mut state, &mut buffer);
+            randomize_sim_state(&mut state, &mut buffer, &mut time_series);
             simulation_mode = SimulationMode::BriansBrain;
         }
 
@@ -202,22 +208,22 @@ async fn main() {
         }
 
         let mut text_y = 25.;
-        for instruction in &INSTRUCTIONS {
-            draw_text(instruction, TEXT_PADDING, text_y, FONT_SIZE, FONT_COLOR);
+        let mut text_to_print = Vec::from(INSTRUCTIONS);
+        let fps_text = format!("FPS: {}", get_fps());
+        let cell_count_text = format!("Cells alive: {}", live_cell_count);
+        text_to_print.push(fps_text.as_str());
+        text_to_print.push(cell_count_text.as_str());
+
+        // print all the text
+        for line in &text_to_print {
+            draw_text(line, TEXT_PADDING, text_y, FONT_SIZE, FONT_COLOR);
             text_y += FONT_SIZE + 5.;
         }
 
-        draw_text(
-            format!("Cells alive: {}", live_cell_count).as_str(),
-            TEXT_PADDING,
-            text_y,
-            FONT_SIZE,
-            FONT_COLOR,
-        );
-
+        // draw a pretty chart
         timestamp += get_frame_time();
-        timeseries.record(DataPoint::new(timestamp, live_cell_count));
-        timeseries.display(TEXT_PADDING, text_y + FONT_SIZE);
+        time_series.record(DataPoint::new(timestamp, live_cell_count));
+        time_series.display(TEXT_PADDING, text_y + FONT_SIZE);
 
         next_frame().await
     }
