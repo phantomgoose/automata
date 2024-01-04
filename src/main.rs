@@ -3,9 +3,11 @@ use macroquad::rand::ChooseRandom;
 
 use crate::brain::get_brain_next_cell_state;
 use crate::conway::get_conway_next_cell_state;
+use crate::stats::{DataPoint, TimeSeries};
 
 mod brain;
 mod conway;
+mod stats;
 mod util;
 
 const ROWS: usize = 256;
@@ -117,6 +119,9 @@ async fn main() {
 
     let cell_width: f32 = screen_width() / COLUMNS as f32;
 
+    let mut timeseries = TimeSeries::new();
+    let mut timestamp = 0.;
+
     // main simulation loop
     loop {
         // exit (if not wasm)
@@ -143,6 +148,7 @@ async fn main() {
         // reset the state
         if is_key_pressed(KeyCode::R) {
             reset_sim_state(&mut state, &mut buffer);
+            timeseries.reset();
         }
 
         // randomize the state
@@ -208,6 +214,10 @@ async fn main() {
             FONT_SIZE,
             FONT_COLOR,
         );
+
+        timestamp += get_frame_time();
+        timeseries.record(DataPoint::new(timestamp, live_cell_count));
+        timeseries.display(TEXT_PADDING, text_y + FONT_SIZE);
 
         next_frame().await
     }
