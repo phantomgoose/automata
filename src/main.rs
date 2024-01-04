@@ -208,14 +208,18 @@ async fn main() {
         }
 
         let mut text_y = 25.;
-        let mut text_to_print = Vec::from(INSTRUCTIONS);
+
         let fps_text = format!("FPS: {}", get_fps());
         let cell_count_text = format!("Cells alive: {}", live_cell_count);
-        text_to_print.push(fps_text.as_str());
-        text_to_print.push(cell_count_text.as_str());
+        let additional_instructions = [fps_text.as_str(), cell_count_text.as_str()];
 
         // print all the text
-        for line in &text_to_print {
+        for idx in 0..INSTRUCTIONS.len() + additional_instructions.len() {
+            let line = if idx < INSTRUCTIONS.len() {
+                INSTRUCTIONS[idx]
+            } else {
+                additional_instructions[idx - INSTRUCTIONS.len()]
+            };
             draw_text(line, TEXT_PADDING, text_y, FONT_SIZE, FONT_COLOR);
             text_y += FONT_SIZE + 5.;
         }
@@ -223,7 +227,7 @@ async fn main() {
         // draw a pretty chart
         timestamp += get_frame_time();
         time_series.record(DataPoint::new(timestamp, live_cell_count));
-        time_series.display(TEXT_PADDING, text_y + FONT_SIZE);
+        time_series.display(TEXT_PADDING, text_y);
 
         next_frame().await
     }
