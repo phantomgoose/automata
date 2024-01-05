@@ -12,7 +12,7 @@ const CHART_WIDTH: f32 = BUCKET_COUNT as f32;
 const CHART_BORDER_COLOR: Color = LIGHTGRAY;
 const CHART_BORDER_THICCNESS: f32 = 1.;
 const CHART_LINE_COLOR: Color = WHITE;
-const CHART_LINE_THICCNESS: f32 = 1.;
+const CHART_LINE_THICCNESS: f32 = 2.;
 
 pub struct DataPoint {
     timestamp_millis: i32,

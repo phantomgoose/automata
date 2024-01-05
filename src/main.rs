@@ -1,5 +1,4 @@
 use macroquad::prelude::*;
-use macroquad::rand::ChooseRandom;
 
 use crate::brain::get_brain_next_cell_state;
 use crate::conway::get_conway_next_cell_state;
@@ -35,10 +34,7 @@ enum CellState {
 impl CellState {
     fn color(&self) -> Color {
         match self {
-            CellState::Alive => {
-                let live_colors = vec![GREEN, BLUE, LIME];
-                *live_colors.choose().unwrap()
-            }
+            CellState::Alive => LIME,
             CellState::Dying => LIGHTGRAY,
             CellState::Dead => BLACK,
         }
@@ -73,7 +69,7 @@ fn get_next_state(
 ) {
     for r in 0..state.len() {
         for c in 0..state[r].len() {
-            buffer[r][c] = update_func(&state, r, c);
+            buffer[r][c] = update_func(state, r, c);
         }
     }
 }
