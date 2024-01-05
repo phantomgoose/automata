@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use macroquad::color::{Color, LIGHTGRAY, WHITE};
 use macroquad::shapes::{draw_line, draw_rectangle};
+use macroquad::text::draw_text;
 
 const BUCKET_SIZE_MILLISECONDS: i32 = 100;
 const CHART_WINDOW_SECONDS: usize = 10;
@@ -13,6 +14,7 @@ const CHART_BORDER_COLOR: Color = LIGHTGRAY;
 const CHART_BORDER_THICCNESS: f32 = 1.;
 const CHART_LINE_COLOR: Color = WHITE;
 const CHART_LINE_THICCNESS: f32 = 2.;
+const CHART_LEGEND_FONT_SIZE: f32 = 14.;
 
 pub struct DataPoint {
     timestamp_millis: i32,
@@ -118,11 +120,31 @@ impl TimeSeries {
         }
     }
 
-    pub fn display(&self, x: f32, y: f32) {
-        // x, y is the upper left corner
+    /// Draw a simple line chart for the average values of the points in the time series. x, y is the upper left corner.
+    pub fn display(&self, x: f32, y: f32, current_val_label: &str) {
+        // we'll draw the averages of the collected points
+        let points: Vec<f32> = self.series.iter().map(|b| b.avg()).collect();
 
-        // draw border
-        // left side
+        // computing max val among existing averages is useful here to scale the chart accordingly
+        // TODO: this could be optimized to avoid scanning through all the stored points on every render
+        // (eg. by storing the max for each bucket, at least)
+        let mut max_val = 0.;
+        for point in &points {
+            if *point > max_val {
+                max_val = *point;
+            }
+        }
+
+        // legend for max value
+        draw_text(
+            format!("Max: {}", max_val as i32).as_str(),
+            x,
+            y - CHART_LEGEND_FONT_SIZE / 2.,
+            CHART_LEGEND_FONT_SIZE,
+            CHART_BORDER_COLOR,
+        );
+
+        // left border
         draw_line(
             x,
             y,
@@ -131,7 +153,8 @@ impl TimeSeries {
             CHART_BORDER_THICCNESS,
             CHART_BORDER_COLOR,
         );
-        // bottom
+
+        // bottom border
         draw_line(
             x,
             y + CHART_HEIGHT + CHART_LINE_THICCNESS,
@@ -141,24 +164,51 @@ impl TimeSeries {
             CHART_BORDER_COLOR,
         );
 
-        // draw the averages
-        let points: Vec<f32> = self.series.iter().map(|b| b.avg()).collect();
+        let mut prev_x = 0.;
+        let mut prev_y = 0.;
+        for (idx, point) in points.iter().enumerate() {
+            let point_height = point / max_val * CHART_HEIGHT;
 
-        // TODO: optimize this
-        let mut max_val = 0.;
-        for point in &points {
-            if *point > max_val {
-                max_val = *point;
+            let point_x = x + idx as f32;
+            let point_y = y + (CHART_HEIGHT - point_height);
+
+            // draw the first point as a simple rectangle
+            if idx == 0 {
+                draw_rectangle(
+                    point_x,
+                    point_y,
+                    CHART_LINE_THICCNESS,
+                    CHART_LINE_THICCNESS,
+                    CHART_LINE_COLOR,
+                );
+
+                prev_x = point_x;
+                prev_y = point_y;
+
+                continue;
             }
+
+            // draw the remaining points as lines connected to the previous point
+            draw_line(
+                prev_x,
+                prev_y,
+                point_x,
+                point_y,
+                CHART_LINE_THICCNESS,
+                CHART_LINE_COLOR,
+            );
+
+            prev_x = point_x;
+            prev_y = point_y;
         }
 
-        for (idx, point) in points.into_iter().enumerate() {
-            let point_height = point / max_val * CHART_HEIGHT;
-            draw_rectangle(
-                x + idx as f32,
-                y + (CHART_HEIGHT - point_height),
-                CHART_LINE_THICCNESS,
-                CHART_LINE_THICCNESS,
+        // draw the legend for the last point
+        if let Some(point) = points.last() {
+            draw_text(
+                format!("{} {}", *point as i32, current_val_label).as_str(),
+                x + CHART_WIDTH + 1.0,
+                prev_y,
+                CHART_LEGEND_FONT_SIZE,
                 CHART_LINE_COLOR,
             );
         }

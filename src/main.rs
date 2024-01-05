@@ -206,8 +206,7 @@ async fn main() {
         let mut text_y = 25.;
 
         let fps_text = format!("FPS: {}", get_fps());
-        let cell_count_text = format!("Cells alive: {}", live_cell_count);
-        let additional_instructions = [fps_text.as_str(), cell_count_text.as_str()];
+        let additional_instructions = [fps_text.as_str()];
 
         // print all the text
         for idx in 0..INSTRUCTIONS.len() + additional_instructions.len() {
@@ -226,7 +225,7 @@ async fn main() {
             (timestamp_secs * 1000.) as i32,
             live_cell_count as f32,
         ));
-        time_series.display(TEXT_PADDING, text_y);
+        time_series.display(TEXT_PADDING, text_y, "cells alive");
 
         next_frame().await
     }
