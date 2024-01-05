@@ -1,12 +1,12 @@
 use macroquad::prelude::*;
 
 use crate::brain::get_brain_next_cell_state;
+use crate::charts::{DataPoint, TimeSeries};
 use crate::conway::get_conway_next_cell_state;
-use crate::stats::{DataPoint, TimeSeries};
 
 mod brain;
+mod charts;
 mod conway;
-mod stats;
 mod util;
 
 const ROWS: usize = 256;
