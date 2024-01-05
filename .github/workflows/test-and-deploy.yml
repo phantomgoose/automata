@@ -1,4 +1,4 @@
-name: Test and deploy WASM
+name: Test and deploy
 
 on:
   # Runs on pushes targeting the default branch
