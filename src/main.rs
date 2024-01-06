@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use std::fmt::{Display, Formatter};
 
 use crate::charts::{DataPoint, TimeSeries};
 use crate::simulations::brain::get_brain_next_cell_state;
@@ -56,6 +57,16 @@ impl SimulationMode {
             SimulationMode::BriansBrain => get_brain_next_cell_state,
             SimulationMode::ConwaysLife => get_conway_next_cell_state,
             SimulationMode::HighLife => get_highlife_next_cell_state,
+        }
+    }
+}
+
+impl Display for SimulationMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SimulationMode::ConwaysLife => write!(f, "Conway's Game of Life"),
+            SimulationMode::BriansBrain => write!(f, "Brian's Brain"),
+            SimulationMode::HighLife => write!(f, "HighLife"),
         }
     }
 }
@@ -239,8 +250,9 @@ async fn main() {
 
         let mut text_y = 25.;
 
+        let mode_text = format!("Current mode: {}", simulation_mode);
         let fps_text = format!("FPS: {}", get_fps());
-        let additional_instructions = [fps_text.as_str()];
+        let additional_instructions = [mode_text.as_str(), fps_text.as_str()];
 
         // print all the text
         for idx in 0..INSTRUCTIONS.len() + additional_instructions.len() {
