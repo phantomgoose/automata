@@ -32,7 +32,7 @@ impl DataPoint {
 
 #[derive(Debug, PartialEq)]
 pub struct DataPointBucket {
-    clamped_timestamp_millis: i32,
+    timestamp_millis: i32,
     sum: f32,
     count: i32,
 }
@@ -49,18 +49,18 @@ impl DataPointBucket {
 }
 
 impl From<DataPoint> for DataPointBucket {
-    fn from(dp: DataPoint) -> Self {
+    fn from(data_point: DataPoint) -> Self {
         let DataPoint {
             timestamp_millis,
             value,
-        } = dp;
+        } = data_point;
 
         // round down to nearest bucket size in milliseconds
-        let clamped_timestamp_millis =
+        let timestamp_millis =
             (timestamp_millis / BUCKET_SIZE_MILLISECONDS) * BUCKET_SIZE_MILLISECONDS;
 
         Self {
-            clamped_timestamp_millis,
+            timestamp_millis,
             sum: value,
             count: 1,
         }
@@ -93,7 +93,7 @@ impl TimeSeries {
         // check if new ts is within X millis of the first value in the bucket
         let last_bucket = last_bucket.expect("Bucket should not be None at this point");
 
-        let bucket_start_ts = last_bucket.clamped_timestamp_millis;
+        let bucket_start_ts = last_bucket.timestamp_millis;
 
         let DataPoint {
             timestamp_millis, ..
@@ -122,16 +122,21 @@ impl TimeSeries {
 
     /// Draw a simple line chart for the average values of the points in the time series. x, y is the upper left corner.
     pub fn display(&self, x: f32, y: f32, current_val_label: &str) {
-        // we'll draw the averages of the collected points
-        let points: Vec<f32> = self.series.iter().map(|b| b.avg()).collect();
+        let mut points: [Option<f32>; BUCKET_COUNT] = [None; BUCKET_COUNT];
+        let mut max_val = 0.; // used for scaling the chart later
 
-        // computing max val among existing averages is useful here to scale the chart accordingly
-        // TODO: this could be optimized to avoid scanning through all the stored points on every render
-        // (eg. by storing the max for each bucket, at least)
-        let mut max_val = 0.;
-        for point in &points {
-            if *point > max_val {
-                max_val = *point;
+        assert!(
+            self.series.len() <= BUCKET_COUNT,
+            "Expected stored buckets to not exceed the max bucket count"
+        );
+
+        for (idx, bucket) in self.series.iter().enumerate() {
+            let bucket_avg = bucket.avg();
+
+            points[idx] = Some(bucket_avg);
+
+            if bucket_avg > max_val {
+                max_val = bucket_avg;
             }
         }
 
@@ -167,6 +172,12 @@ impl TimeSeries {
         let mut prev_x = 0.;
         let mut prev_y = 0.;
         for (idx, point) in points.iter().enumerate() {
+            if point.is_none() {
+                // no more valid points in the array
+                break;
+            };
+
+            let point = point.unwrap();
             let point_height = point / max_val * CHART_HEIGHT;
 
             let point_x = x + idx as f32;
@@ -203,7 +214,7 @@ impl TimeSeries {
         }
 
         // draw the legend for the last point
-        if let Some(point) = points.last() {
+        if let Some(Some(point)) = points.last() {
             draw_text(
                 format!("{} {}", *point as i32, current_val_label).as_str(),
                 x + CHART_WIDTH + 1.0,
@@ -231,17 +242,17 @@ mod tests {
             ts.series,
             VecDeque::from(vec![
                 DataPointBucket {
-                    clamped_timestamp_millis: 0,
+                    timestamp_millis: 0,
                     sum: 1.,
                     count: 1,
                 },
                 DataPointBucket {
-                    clamped_timestamp_millis: 100,
+                    timestamp_millis: 100,
                     sum: 2.,
                     count: 1,
                 },
                 DataPointBucket {
-                    clamped_timestamp_millis: 200,
+                    timestamp_millis: 200,
                     sum: 3.,
                     count: 1,
                 },
@@ -259,7 +270,7 @@ mod tests {
         assert_eq!(
             ts.series,
             VecDeque::from(vec![DataPointBucket {
-                clamped_timestamp_millis: 0,
+                timestamp_millis: 0,
                 sum: 6.,
                 count: 3,
             },])
