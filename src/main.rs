@@ -1,12 +1,12 @@
 use macroquad::prelude::*;
 
-use crate::brain::get_brain_next_cell_state;
 use crate::charts::{DataPoint, TimeSeries};
-use crate::conway::get_conway_next_cell_state;
+use crate::simulations::brain::get_brain_next_cell_state;
+use crate::simulations::conway::get_conway_next_cell_state;
+use crate::simulations::highlife::get_highlife_next_cell_state;
 
-mod brain;
 mod charts;
-mod conway;
+mod simulations;
 mod util;
 
 const ROWS: usize = 256;
@@ -14,12 +14,13 @@ const COLUMNS: usize = 256;
 const FONT_SIZE: f32 = 24.;
 const TEXT_PADDING: f32 = 25.;
 const FONT_COLOR: Color = WHITE;
-const INSTRUCTIONS: [&str; 7] = [
+const INSTRUCTIONS: [&str; 8] = [
     "Controls:",
     "R -> Clear",
     "A -> Randomize",
     "B -> Brian's Brain",
     "C -> Conway's Game of Life",
+    "H -> HighLife",
     "LMB -> Spawn Live Cells",
     "ESC -> Quit",
 ];
@@ -46,6 +47,7 @@ enum SimulationMode {
     #[default]
     ConwaysLife,
     BriansBrain,
+    HighLife,
 }
 
 impl SimulationMode {
@@ -53,6 +55,7 @@ impl SimulationMode {
         match self {
             SimulationMode::BriansBrain => get_brain_next_cell_state,
             SimulationMode::ConwaysLife => get_conway_next_cell_state,
+            SimulationMode::HighLife => get_highlife_next_cell_state,
         }
     }
 }
@@ -111,6 +114,17 @@ fn randomize_sim_state(
     }
 }
 
+fn select_sim_mode(
+    state: &mut SimulationState,
+    buffer: &mut SimulationState,
+    time_series: &mut TimeSeries,
+    old_mode: &mut SimulationMode,
+    new_mode: SimulationMode,
+) {
+    randomize_sim_state(state, buffer, time_series);
+    *old_mode = new_mode;
+}
+
 #[macroquad::main("Automata")]
 async fn main() {
     // set window size
@@ -162,14 +176,34 @@ async fn main() {
 
         // select conway's game of life
         if is_key_pressed(KeyCode::C) {
-            randomize_sim_state(&mut state, &mut buffer, &mut time_series);
-            simulation_mode = SimulationMode::ConwaysLife;
+            select_sim_mode(
+                &mut state,
+                &mut buffer,
+                &mut time_series,
+                &mut simulation_mode,
+                SimulationMode::ConwaysLife,
+            );
         }
 
         // select brian's brain
         if is_key_pressed(KeyCode::B) {
-            randomize_sim_state(&mut state, &mut buffer, &mut time_series);
-            simulation_mode = SimulationMode::BriansBrain;
+            select_sim_mode(
+                &mut state,
+                &mut buffer,
+                &mut time_series,
+                &mut simulation_mode,
+                SimulationMode::BriansBrain,
+            );
+        }
+
+        if is_key_pressed(KeyCode::H) {
+            select_sim_mode(
+                &mut state,
+                &mut buffer,
+                &mut time_series,
+                &mut simulation_mode,
+                SimulationMode::HighLife,
+            );
         }
 
         // write updated cell state for the next frame to buffer, based on the currently selected simulation mode
