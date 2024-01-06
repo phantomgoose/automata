@@ -169,6 +169,7 @@ impl TimeSeries {
             CHART_BORDER_COLOR,
         );
 
+        let mut last_point = 0.;
         let mut prev_x = 0.;
         let mut prev_y = 0.;
         for (idx, point) in points.iter().enumerate() {
@@ -182,6 +183,8 @@ impl TimeSeries {
 
             let point_x = x + idx as f32;
             let point_y = y + (CHART_HEIGHT - point_height);
+
+            last_point = point;
 
             // draw the first point as a simple rectangle
             if idx == 0 {
@@ -214,15 +217,13 @@ impl TimeSeries {
         }
 
         // draw the legend for the last point
-        if let Some(Some(point)) = points.last() {
-            draw_text(
-                format!("{} {}", *point as i32, current_val_label).as_str(),
-                x + CHART_WIDTH + 1.0,
-                prev_y,
-                CHART_LEGEND_FONT_SIZE,
-                CHART_LINE_COLOR,
-            );
-        }
+        draw_text(
+            format!("{} {}", last_point as i32, current_val_label).as_str(),
+            x + CHART_WIDTH + 1.0,
+            prev_y,
+            CHART_LEGEND_FONT_SIZE,
+            CHART_LINE_COLOR,
+        );
     }
 }
 
