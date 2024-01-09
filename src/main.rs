@@ -11,8 +11,8 @@ mod charts;
 mod simulations;
 mod util;
 
-const ROWS: usize = 512;
-const COLUMNS: usize = 512;
+const ROWS: usize = 256;
+const COLUMNS: usize = 256;
 const FONT_SIZE: f32 = 24.;
 const TEXT_PADDING: f32 = 25.;
 const FONT_COLOR: Color = WHITE;
