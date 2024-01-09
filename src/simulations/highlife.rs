@@ -1,7 +1,7 @@
 use crate::util::count_cells;
 use crate::{CellState, SimulationState};
 
-// Conway's Game of Life
+// The HighLife variation of the Game of Life
 pub fn get_highlife_next_cell_state(
     state: &SimulationState,
     row: usize,

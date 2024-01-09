@@ -1,27 +1,30 @@
 use macroquad::prelude::*;
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 use crate::charts::{DataPoint, TimeSeries};
 use crate::simulations::brain::get_brain_next_cell_state;
 use crate::simulations::conway::get_conway_next_cell_state;
 use crate::simulations::highlife::get_highlife_next_cell_state;
+use crate::simulations::seeds::get_seeds_next_cell_state;
 
 mod charts;
 mod simulations;
 mod util;
 
-const ROWS: usize = 256;
-const COLUMNS: usize = 256;
+const ROWS: usize = 512;
+const COLUMNS: usize = 512;
 const FONT_SIZE: f32 = 24.;
 const TEXT_PADDING: f32 = 25.;
 const FONT_COLOR: Color = WHITE;
-const INSTRUCTIONS: [&str; 8] = [
+const INSTRUCTIONS: [&str; 9] = [
     "Controls:",
     "R -> Clear",
     "A -> Randomize",
     "B -> Brian's Brain",
     "C -> Conway's Game of Life",
     "H -> HighLife",
+    "S -> Seeds",
     "LMB -> Spawn Live Cells",
     "ESC -> Quit",
 ];
@@ -49,6 +52,7 @@ enum SimulationMode {
     ConwaysLife,
     BriansBrain,
     HighLife,
+    Seeds,
 }
 
 impl SimulationMode {
@@ -57,6 +61,7 @@ impl SimulationMode {
             SimulationMode::BriansBrain => get_brain_next_cell_state,
             SimulationMode::ConwaysLife => get_conway_next_cell_state,
             SimulationMode::HighLife => get_highlife_next_cell_state,
+            SimulationMode::Seeds => get_seeds_next_cell_state,
         }
     }
 }
@@ -67,6 +72,7 @@ impl Display for SimulationMode {
             SimulationMode::ConwaysLife => write!(f, "Conway's Game of Life"),
             SimulationMode::BriansBrain => write!(f, "Brian's Brain"),
             SimulationMode::HighLife => write!(f, "HighLife"),
+            SimulationMode::Seeds => write!(f, "Seeds"),
         }
     }
 }
@@ -118,7 +124,7 @@ fn randomize_sim_state(
     reset_sim_state(state, buffer, time_series);
     for r in 0..state.len() {
         for c in 0..state.len() {
-            if rand::gen_range(0, 5) == 0 {
+            if rand::gen_range(0, 10) == 0 {
                 state[r][c] = CellState::Alive;
             }
         }
@@ -214,6 +220,16 @@ async fn main() {
                 &mut time_series,
                 &mut simulation_mode,
                 SimulationMode::HighLife,
+            );
+        }
+
+        if is_key_pressed(KeyCode::S) {
+            select_sim_mode(
+                &mut state,
+                &mut buffer,
+                &mut time_series,
+                &mut simulation_mode,
+                SimulationMode::Seeds,
             );
         }
 
