@@ -6,8 +6,10 @@ use crate::simulations::brain::get_brain_next_cell_state;
 use crate::simulations::conway::get_conway_next_cell_state;
 use crate::simulations::highlife::get_highlife_next_cell_state;
 use crate::simulations::seeds::get_seeds_next_cell_state;
+use crate::simulations::tree::get_tree_next_cell_state;
 
 mod charts;
+mod models;
 mod simulations;
 mod util;
 
@@ -16,7 +18,7 @@ const COLUMNS: usize = 256;
 const FONT_SIZE: f32 = 24.;
 const TEXT_PADDING: f32 = 25.;
 const FONT_COLOR: Color = WHITE;
-const INSTRUCTIONS: [&str; 9] = [
+const INSTRUCTIONS: [&str; 10] = [
     "Controls:",
     "R -> Clear",
     "A -> Randomize",
@@ -24,6 +26,7 @@ const INSTRUCTIONS: [&str; 9] = [
     "C -> Conway's Game of Life",
     "H -> HighLife",
     "S -> Seeds",
+    "T -> Trees",
     "LMB -> Spawn Live Cells",
     "ESC -> Quit",
 ];
@@ -52,6 +55,7 @@ enum SimulationMode {
     BriansBrain,
     HighLife,
     Seeds,
+    Tree,
 }
 
 impl SimulationMode {
@@ -61,6 +65,7 @@ impl SimulationMode {
             SimulationMode::ConwaysLife => get_conway_next_cell_state,
             SimulationMode::HighLife => get_highlife_next_cell_state,
             SimulationMode::Seeds => get_seeds_next_cell_state,
+            SimulationMode::Tree => get_tree_next_cell_state,
         }
     }
 }
@@ -72,6 +77,7 @@ impl Display for SimulationMode {
             SimulationMode::BriansBrain => write!(f, "Brian's Brain"),
             SimulationMode::HighLife => write!(f, "HighLife"),
             SimulationMode::Seeds => write!(f, "Seeds"),
+            SimulationMode::Tree => write!(f, "Tree"),
         }
     }
 }
@@ -190,7 +196,7 @@ async fn main() {
             randomize_sim_state(&mut state, &mut buffer, &mut time_series);
         }
 
-        // select conway's game of life
+        // TODO: refactor to avoid having to specify instructions and keybinds in 2 different places
         if is_key_pressed(KeyCode::C) {
             select_sim_mode(
                 &mut state,
@@ -201,7 +207,6 @@ async fn main() {
             );
         }
 
-        // select brian's brain
         if is_key_pressed(KeyCode::B) {
             select_sim_mode(
                 &mut state,
