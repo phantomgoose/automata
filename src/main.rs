@@ -2,6 +2,7 @@ use macroquad::prelude::*;
 use std::fmt::{Display, Formatter};
 
 use crate::charts::{DataPoint, TimeSeries};
+use crate::models::trainer::{AgentAction, QModel};
 use crate::simulations::brain::get_brain_next_cell_state;
 use crate::simulations::conway::get_conway_next_cell_state;
 use crate::simulations::highlife::get_highlife_next_cell_state;
@@ -13,8 +14,7 @@ mod models;
 mod simulations;
 mod util;
 
-const ROWS: usize = 256;
-const COLUMNS: usize = 256;
+const BOARD_SIZE: usize = 32;
 const FONT_SIZE: f32 = 24.;
 const TEXT_PADDING: f32 = 25.;
 const FONT_COLOR: Color = WHITE;
@@ -31,18 +31,18 @@ const INSTRUCTIONS: [&str; 10] = [
     "ESC -> Quit",
 ];
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Hash, Eq)]
 enum CellState {
-    Alive,
-    Dying,
     Dead,
+    Dying,
+    Alive,
 }
 
 impl CellState {
     fn color(&self) -> Color {
         match self {
-            CellState::Alive => LIME,
-            CellState::Dying => LIGHTGRAY,
+            CellState::Alive => GREEN,
+            CellState::Dying => BROWN,
             CellState::Dead => BLACK,
         }
     }
@@ -61,11 +61,31 @@ enum SimulationMode {
 impl SimulationMode {
     fn cell_state_fn(&self) -> CellStateGenerator {
         match self {
-            SimulationMode::BriansBrain => get_brain_next_cell_state,
-            SimulationMode::ConwaysLife => get_conway_next_cell_state,
-            SimulationMode::HighLife => get_highlife_next_cell_state,
-            SimulationMode::Seeds => get_seeds_next_cell_state,
-            SimulationMode::Tree => get_tree_next_cell_state,
+            SimulationMode::BriansBrain => |state, row, col, model, agent_row, agent_col, _| {
+                get_brain_next_cell_state(state, row, col)
+            },
+            SimulationMode::ConwaysLife => |state, row, col, model, agent_row, agent_col, _| {
+                get_conway_next_cell_state(state, row, col)
+            },
+            SimulationMode::HighLife => |state, row, col, model, agent_row, agent_col, _| {
+                get_highlife_next_cell_state(state, row, col)
+            },
+            SimulationMode::Seeds => |state, row, col, model, agent_row, agent_col, _| {
+                get_seeds_next_cell_state(state, row, col)
+            },
+            SimulationMode::Tree => {
+                |state, row, col, model, agent_row, agent_col, agent_prev_action| {
+                    get_tree_next_cell_state(
+                        state,
+                        row,
+                        col,
+                        model,
+                        agent_row,
+                        agent_col,
+                        agent_prev_action,
+                    )
+                }
+            }
         }
     }
 }
@@ -82,26 +102,50 @@ impl Display for SimulationMode {
     }
 }
 
-type SimulationState = [[CellState; COLUMNS]; ROWS];
+type SimulationState = [[CellState; BOARD_SIZE]; BOARD_SIZE];
 
-type CellStateGenerator = fn(&SimulationState, usize, usize) -> CellState;
+type RenderRow = usize;
+type RenderColumn = usize;
+type AgentRow = usize;
+type AgentColumn = usize;
+type CellStateGenerator = fn(
+    &SimulationState,
+    RenderRow,
+    RenderColumn,
+    &QModel,
+    &mut AgentRow,
+    &mut AgentColumn,
+    &mut Option<AgentAction>,
+) -> CellState;
 
 /// Given the starting simulation state, update each cell in the buffer using the supplied update func
 fn get_next_state(
     state: &SimulationState,
+    model: &QModel,
     buffer: &mut SimulationState,
+    agent_row: &mut AgentRow,
+    agent_column: &mut AgentColumn,
+    agent_prev_action: &mut Option<AgentAction>,
     update_func: CellStateGenerator,
 ) {
     for r in 0..state.len() {
         for c in 0..state[r].len() {
-            buffer[r][c] = update_func(state, r, c);
+            buffer[r][c] = update_func(
+                state,
+                r,
+                c,
+                model,
+                agent_row,
+                agent_column,
+                agent_prev_action,
+            );
         }
     }
 }
 
 fn get_clean_state() -> (SimulationState, SimulationState) {
-    let state = [[CellState::Dead; COLUMNS]; ROWS];
-    let buffer = [[CellState::Dead; COLUMNS]; ROWS];
+    let state = [[CellState::Dead; BOARD_SIZE]; BOARD_SIZE];
+    let buffer = [[CellState::Dead; BOARD_SIZE]; BOARD_SIZE];
     assert_eq!(
         std::mem::size_of_val(&state),
         std::mem::size_of_val(&buffer),
@@ -158,10 +202,16 @@ async fn main() {
 
     let mut simulation_mode = SimulationMode::ConwaysLife;
 
-    let cell_width: f32 = screen_width() / COLUMNS as f32;
+    let cell_width: f32 = screen_width() / BOARD_SIZE as f32;
 
     let mut time_series = TimeSeries::new();
     let mut timestamp_secs = 0.;
+
+    let mut agent_row = 0;
+    let mut agent_col = 0;
+    let mut agent_prev_action = None;
+
+    let tree_model = QModel::new();
 
     // main simulation loop
     loop {
@@ -177,7 +227,7 @@ async fn main() {
             let column = (x / cell_width) as usize;
 
             // bounds check
-            if (row > 0 && row < ROWS - 1) && (column > 0 && column < COLUMNS - 1) {
+            if (row > 0 && row < BOARD_SIZE - 1) && (column > 0 && column < BOARD_SIZE - 1) {
                 // spawn a square around the mouse pointer - works well for the supported sims
                 state[row][column] = CellState::Alive;
                 state[row + 1][column] = CellState::Alive;
@@ -188,15 +238,19 @@ async fn main() {
 
         // reset the state
         if is_key_pressed(KeyCode::R) {
+            agent_row = 0;
+            agent_col = 0;
             reset_sim_state(&mut state, &mut buffer, &mut time_series);
         }
 
         // randomize the state
         if is_key_pressed(KeyCode::A) {
+            agent_row = 0;
+            agent_col = 0;
             randomize_sim_state(&mut state, &mut buffer, &mut time_series);
         }
 
-        // TODO: refactor to avoid having to specify instructions and keybinds in 2 different places
+        // TODO: refactor to avoid code repetition and having to specify instructions and keybinds in 2 different places
         if is_key_pressed(KeyCode::C) {
             select_sim_mode(
                 &mut state,
@@ -237,8 +291,28 @@ async fn main() {
             );
         }
 
+        if is_key_pressed(KeyCode::T) {
+            agent_row = 0;
+            agent_col = 0;
+            select_sim_mode(
+                &mut state,
+                &mut buffer,
+                &mut time_series,
+                &mut simulation_mode,
+                SimulationMode::Tree,
+            );
+        }
+
         // write updated cell state for the next frame to buffer, based on the currently selected simulation mode
-        get_next_state(&state, &mut buffer, simulation_mode.cell_state_fn());
+        get_next_state(
+            &state,
+            &tree_model,
+            &mut buffer,
+            &mut agent_row,
+            &mut agent_col,
+            &mut agent_prev_action,
+            simulation_mode.cell_state_fn(),
+        );
 
         // keep track of how many cells are alive
         let mut live_cell_count = 0;
