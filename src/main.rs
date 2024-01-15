@@ -14,7 +14,7 @@ mod models;
 mod simulations;
 mod util;
 
-const BOARD_SIZE: usize = 32;
+const BOARD_SIZE: usize = 16;
 const FONT_SIZE: f32 = 24.;
 const TEXT_PADDING: f32 = 25.;
 const FONT_COLOR: Color = WHITE;
@@ -33,17 +33,17 @@ const INSTRUCTIONS: [&str; 10] = [
 
 #[derive(Clone, Copy, PartialEq, Debug, Hash, Eq)]
 enum CellState {
-    Dead,
-    Dying,
-    Alive,
+    Empty,
+    Trunk,
+    Leaf,
 }
 
 impl CellState {
     fn color(&self) -> Color {
         match self {
-            CellState::Alive => GREEN,
-            CellState::Dying => BROWN,
-            CellState::Dead => BLACK,
+            CellState::Leaf => GREEN,
+            CellState::Trunk => BROWN,
+            CellState::Empty => BLACK,
         }
     }
 }
@@ -61,22 +61,33 @@ enum SimulationMode {
 impl SimulationMode {
     fn cell_state_fn(&self) -> CellStateGenerator {
         match self {
-            SimulationMode::BriansBrain => |state, row, col, model, agent_row, agent_col, _| {
-                get_brain_next_cell_state(state, row, col)
-            },
-            SimulationMode::ConwaysLife => |state, row, col, model, agent_row, agent_col, _| {
-                get_conway_next_cell_state(state, row, col)
-            },
-            SimulationMode::HighLife => |state, row, col, model, agent_row, agent_col, _| {
-                get_highlife_next_cell_state(state, row, col)
-            },
-            SimulationMode::Seeds => |state, row, col, model, agent_row, agent_col, _| {
-                get_seeds_next_cell_state(state, row, col)
+            SimulationMode::BriansBrain => {
+                |state, buffer, row, col, model, agent_row, agent_col, _| {
+                    let cell_state = get_brain_next_cell_state(state, row, col);
+                    buffer[row][col] = cell_state;
+                }
+            }
+            SimulationMode::ConwaysLife => {
+                |state, buffer, row, col, model, agent_row, agent_col, _| {
+                    let cell_state = get_conway_next_cell_state(state, row, col);
+                    buffer[row][col] = cell_state;
+                }
+            }
+            SimulationMode::HighLife => {
+                |state, buffer, row, col, model, agent_row, agent_col, _| {
+                    let cell_state = get_highlife_next_cell_state(state, row, col);
+                    buffer[row][col] = cell_state;
+                }
+            }
+            SimulationMode::Seeds => |state, buffer, row, col, model, agent_row, agent_col, _| {
+                let cell_state = get_seeds_next_cell_state(state, row, col);
+                buffer[row][col] = cell_state;
             },
             SimulationMode::Tree => {
-                |state, row, col, model, agent_row, agent_col, agent_prev_action| {
+                |state, buffer, row, col, model, agent_row, agent_col, agent_prev_action| {
                     get_tree_next_cell_state(
                         state,
+                        buffer,
                         row,
                         col,
                         model,
@@ -110,13 +121,14 @@ type AgentRow = usize;
 type AgentColumn = usize;
 type CellStateGenerator = fn(
     &SimulationState,
+    &mut SimulationState,
     RenderRow,
     RenderColumn,
     &QModel,
     &mut AgentRow,
     &mut AgentColumn,
     &mut Option<AgentAction>,
-) -> CellState;
+) -> ();
 
 /// Given the starting simulation state, update each cell in the buffer using the supplied update func
 fn get_next_state(
@@ -130,8 +142,9 @@ fn get_next_state(
 ) {
     for r in 0..state.len() {
         for c in 0..state[r].len() {
-            buffer[r][c] = update_func(
+            update_func(
                 state,
+                buffer,
                 r,
                 c,
                 model,
@@ -144,8 +157,8 @@ fn get_next_state(
 }
 
 fn get_clean_state() -> (SimulationState, SimulationState) {
-    let state = [[CellState::Dead; BOARD_SIZE]; BOARD_SIZE];
-    let buffer = [[CellState::Dead; BOARD_SIZE]; BOARD_SIZE];
+    let state = [[CellState::Empty; BOARD_SIZE]; BOARD_SIZE];
+    let buffer = [[CellState::Empty; BOARD_SIZE]; BOARD_SIZE];
     assert_eq!(
         std::mem::size_of_val(&state),
         std::mem::size_of_val(&buffer),
@@ -164,7 +177,7 @@ fn reset_sim_state(
     (*state, *buffer) = get_clean_state()
 }
 
-/// Randomly sets cells in the starting state to [CellState::Alive]
+/// Randomly sets cells in the starting state to [CellState::Leaf]
 fn randomize_sim_state(
     state: &mut SimulationState,
     buffer: &mut SimulationState,
@@ -174,7 +187,7 @@ fn randomize_sim_state(
     for r in 0..state.len() {
         for c in 0..state.len() {
             if rand::gen_range(0, 10) == 0 {
-                state[r][c] = CellState::Alive;
+                state[r][c] = CellState::Leaf;
             }
         }
     }
@@ -207,8 +220,8 @@ async fn main() {
     let mut time_series = TimeSeries::new();
     let mut timestamp_secs = 0.;
 
-    let mut agent_row = 0;
-    let mut agent_col = 0;
+    let mut agent_row = BOARD_SIZE - 1;
+    let mut agent_col = BOARD_SIZE / 2;
     let mut agent_prev_action = None;
 
     let tree_model = QModel::new();
@@ -229,17 +242,17 @@ async fn main() {
             // bounds check
             if (row > 0 && row < BOARD_SIZE - 1) && (column > 0 && column < BOARD_SIZE - 1) {
                 // spawn a square around the mouse pointer - works well for the supported sims
-                state[row][column] = CellState::Alive;
-                state[row + 1][column] = CellState::Alive;
-                state[row][column + 1] = CellState::Alive;
-                state[row + 1][column + 1] = CellState::Alive;
+                state[row][column] = CellState::Leaf;
+                state[row + 1][column] = CellState::Leaf;
+                state[row][column + 1] = CellState::Leaf;
+                state[row + 1][column + 1] = CellState::Leaf;
             }
         }
 
         // reset the state
         if is_key_pressed(KeyCode::R) {
-            agent_row = 0;
-            agent_col = 0;
+            agent_row = BOARD_SIZE - 1;
+            agent_col = BOARD_SIZE / 2;
             reset_sim_state(&mut state, &mut buffer, &mut time_series);
         }
 
@@ -322,7 +335,7 @@ async fn main() {
             for c in 0..buffer[r].len() {
                 let cell = buffer[r][c];
 
-                if cell == CellState::Alive {
+                if cell == CellState::Leaf {
                     live_cell_count += 1;
                 }
 

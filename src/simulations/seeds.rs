@@ -3,17 +3,17 @@ use crate::{CellState, SimulationState};
 
 // Seeds variation of the Game of Life
 pub fn get_seeds_next_cell_state(state: &SimulationState, row: usize, column: usize) -> CellState {
-    let live_cell_count = count_cells(state, row, column, |cell| cell == CellState::Alive);
+    let live_cell_count = count_cells(state, row, column, |cell| cell == CellState::Leaf);
 
     match state[row][column] {
-        CellState::Alive => CellState::Dead,
-        CellState::Dead => {
+        CellState::Leaf => CellState::Empty,
+        CellState::Empty => {
             if live_cell_count == 2 {
-                CellState::Alive
+                CellState::Leaf
             } else {
-                CellState::Dead
+                CellState::Empty
             }
         }
-        _ => CellState::Dead,
+        _ => CellState::Empty,
     }
 }

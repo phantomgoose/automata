@@ -7,16 +7,16 @@ pub fn get_highlife_next_cell_state(
     row: usize,
     column: usize,
 ) -> CellState {
-    let live_cell_count = count_cells(state, row, column, |cell| cell == CellState::Alive);
+    let live_cell_count = count_cells(state, row, column, |cell| cell == CellState::Leaf);
 
     // underpopulated or overpopulated
     if live_cell_count < 2 || live_cell_count > 3 {
-        return CellState::Dead;
+        return CellState::Empty;
     }
 
     // just right 👌
     if live_cell_count == 3 || live_cell_count == 6 {
-        return CellState::Alive;
+        return CellState::Leaf;
     }
 
     // unchanged otherwise

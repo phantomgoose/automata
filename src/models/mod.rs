@@ -10,9 +10,9 @@ type Output = CellState;
 impl From<CellState> for u8 {
     fn from(value: CellState) -> Self {
         match value {
-            CellState::Dead => 0,
-            CellState::Alive => 1,
-            CellState::Dying => 2,
+            CellState::Empty => 0,
+            CellState::Leaf => 1,
+            CellState::Trunk => 2,
         }
     }
 }
@@ -38,9 +38,9 @@ fn predict(features: Features) -> Output {
     // this is actually a fun pattern somehow
     let sum: u8 = features.iter().sum();
     if sum % 2 == 0 {
-        CellState::Alive
+        CellState::Leaf
     } else {
-        CellState::Dead
+        CellState::Empty
     }
 }
 

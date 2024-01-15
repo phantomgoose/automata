@@ -1,37 +1,43 @@
 use rurel::AgentTrainer;
-// agent
+
 use rurel::mdp::Agent;
 use rurel::mdp::State;
 use rurel::strategy::explore::RandomExploration;
 use rurel::strategy::learn::QLearning;
 use rurel::strategy::terminate::FixedIterations;
 
-use crate::{SimulationState, BOARD_SIZE};
+use crate::models::cell_to_u8;
+use crate::util::get_cell_with_bounds_check;
+use crate::{CellState, SimulationState, BOARD_SIZE};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum AgentAction {
-    Left,
-    Right,
-    Up,
-    Down,
+    ToTrunk,      // turn current cell to trunk and move up
+    SproutLeaves, // grow leaves around current location
+    DoNothing,    // no-op
 }
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 struct SimState {
-    // board: SimulationState,
-    // location of the agent on the board
-    row: i32,
-    column: i32,
-    prev_move: Option<AgentAction>,
+    board: SimulationState,
+    left: Option<CellState>,
+    right: Option<CellState>,
+    down: Option<CellState>,
+    current: CellState,
+    row: usize,
+    column: usize,
 }
 
 impl SimState {
     fn new() -> Self {
         Self {
-            // board: [[CellState::Dead; BOARD_SIZE]; BOARD_SIZE],
-            row: 0,
-            column: 0,
-            prev_move: None,
+            board: [[CellState::Empty; BOARD_SIZE]; BOARD_SIZE],
+            left: Some(CellState::Empty),
+            right: Some(CellState::Empty),
+            down: None,
+            current: CellState::Empty,
+            row: BOARD_SIZE - 1,
+            column: BOARD_SIZE / 2,
         }
     }
 }
@@ -39,54 +45,52 @@ impl SimState {
 impl State for SimState {
     type A = AgentAction;
     fn reward(&self) -> f64 {
-        // // sum all dead cells to encourage growth
-        // // TODO: make this more interesting
-        // let mut dead_cells = 0;
-        //
-        // for row in self.board.iter() {
-        //     for cell in row.iter() {
-        //         if *cell == CellState::Dead {
-        //             dead_cells += 1;
-        //         }
-        //     }
-        // }
-        //
-        // // TODO: need to punish lack of exploration
-        //
-        // -dead_cells as f64
+        let mut leaf_count = 0;
+        let mut trunk_count = 0;
 
-        // just try to grow to bottom right
-        -(((BOARD_SIZE as i32 - self.column).pow(2) + (BOARD_SIZE as i32 - self.row).pow(2)) as f64)
-            .sqrt()
-        // TODO: need to punish lack of exploration
+        for cell in self.board.iter().flatten() {
+            if *cell == CellState::Trunk {
+                trunk_count += 1;
+            } else if *cell == CellState::Leaf {
+                leaf_count += 1;
+            }
+        }
+
+        // // sun is in the upper right
+        // let (sun_pos_x, sun_pos_y) = (BOARD_SIZE as i32 * 2, -(BOARD_SIZE as i32));
+        //
+        // // reward leaves more the closer they are to the sun
+        // // reward the trunk at a diminished rate
+        // // TODO: this is wrong as it doesn't reward the location of each leaf, just the current cell
+        // (trunk_count / 100 + leaf_count) as f64
+        //     * -(((sun_pos_x - self.column as i32).pow(2) + (sun_pos_y - self.row as i32).pow(2))
+        //         as f64)
+        //         .sqrt()
+
+        (trunk_count / 100 + leaf_count) as f64
     }
 
     fn actions(&self) -> Vec<AgentAction> {
-        let mut actions = vec![];
+        let mut valid_actions = vec![AgentAction::DoNothing];
 
-        // let state = &self.board;
-        let row = self.row;
-        let column = self.column;
-
-        // let left = get_cell_with_bounds_check(state, Some(row), column.checked_sub(1));
-        // let right = get_cell_with_bounds_check(state, Some(row), column.checked_add(1));
-        // let up = get_cell_with_bounds_check(state, row.checked_sub(1), Some(column));
-        // let down = get_cell_with_bounds_check(state, row.checked_add(1), Some(column));
-
-        if column > 0 && self.prev_move != Some(AgentAction::Right) {
-            actions.push(AgentAction::Left);
-        }
-        if column < BOARD_SIZE as i32 - 1 && self.prev_move != Some(AgentAction::Left) {
-            actions.push(AgentAction::Right);
-        }
-        if row > 0 && self.prev_move != Some(AgentAction::Down) {
-            actions.push(AgentAction::Up);
-        }
-        if row < BOARD_SIZE as i32 - 1 && self.prev_move != Some(AgentAction::Up) {
-            actions.push(AgentAction::Down);
+        // can turn to trunk:
+        if
+        // 1) if we're on the ground layer and neighbor cells are free
+        (self.row == BOARD_SIZE - 1
+            && self.left == Some(CellState::Empty)
+            && self.right == Some(CellState::Empty))
+            // 2) OR if the cell below is also a trunk AND we're not at the top yet
+            || (self.row > 0 && self.down == Some(CellState::Trunk))
+        {
+            valid_actions.push(AgentAction::ToTrunk);
         }
 
-        actions
+        // can sprout leaves if the cell below is trunk and height > half of board and we aren't already on a leaf cell
+        if self.down == Some(CellState::Trunk) && self.current != CellState::Leaf {
+            valid_actions.push(AgentAction::SproutLeaves);
+        }
+
+        valid_actions
     }
 }
 
@@ -100,26 +104,52 @@ impl Agent<SimState> for TreeAgent {
     }
 
     fn take_action(&mut self, action: &AgentAction) {
-        // self.state.board[self.state.row][self.state.column] = CellState::Alive;
-
-        // actions are all valid, so this should be safe
-        // grow into the desired direction
         match action {
-            AgentAction::Left => {
-                self.state.column -= 1;
-                self.state.prev_move = Some(AgentAction::Left);
+            AgentAction::ToTrunk => {
+                let SimState {
+                    mut row,
+                    column,
+                    mut board,
+                    ..
+                } = self.state;
+
+                board[row][column] = CellState::Trunk;
+                row -= 1;
+
+                let current = get_cell_with_bounds_check(&board, Some(row), Some(column))
+                    .expect("current cell should always exist and be valid");
+                let left = get_cell_with_bounds_check(&board, Some(row), column.checked_sub(1));
+                let right = get_cell_with_bounds_check(&board, Some(row), column.checked_add(1));
+                let down = get_cell_with_bounds_check(&board, row.checked_add(1), Some(column));
+
+                self.state = SimState {
+                    board,
+                    left,
+                    right,
+                    down,
+                    current,
+                    row,
+                    column,
+                };
             }
-            AgentAction::Right => {
-                self.state.column += 1;
-                self.state.prev_move = Some(AgentAction::Right);
+            AgentAction::SproutLeaves => {
+                let SimState { row, column, .. } = self.state;
+
+                if column > 0 {
+                    self.state.board[row][column - 1] = CellState::Leaf;
+                    self.state.left = Some(CellState::Leaf);
+                }
+
+                if column < BOARD_SIZE - 1 {
+                    self.state.board[row][column + 1] = CellState::Leaf;
+                    self.state.right = Some(CellState::Leaf);
+                }
+
+                self.state.board[row][column] = CellState::Leaf;
+                self.state.current = CellState::Leaf;
             }
-            AgentAction::Up => {
-                self.state.row -= 1;
-                self.state.prev_move = Some(AgentAction::Up);
-            }
-            AgentAction::Down => {
-                self.state.row += 1;
-                self.state.prev_move = Some(AgentAction::Down);
+            AgentAction::DoNothing => {
+                // no-op
             }
         }
     }
@@ -132,8 +162,8 @@ fn train() -> AgentTrainer<SimState> {
     };
     trainer.train(
         &mut agent,
-        &QLearning::new(0.5, 0.01, 2.),
-        &mut FixedIterations::new(100000),
+        &QLearning::new(0.2, 0.01, -10.),
+        &mut FixedIterations::new(100_000),
         &RandomExploration::new(),
     );
 
@@ -161,19 +191,22 @@ impl QModel {
         prev_move: Option<AgentAction>,
     ) -> Option<AgentAction> {
         let possible_actions = vec![
-            AgentAction::Left,
-            AgentAction::Right,
-            AgentAction::Up,
-            AgentAction::Down,
+            // AgentAction::DoNothing,
+            AgentAction::SproutLeaves,
+            AgentAction::ToTrunk,
         ];
 
         let mut best_action: Option<(AgentAction, f64)> = None;
 
         let model_state = SimState {
-            // board: *simulation_state,
-            row: row as i32,
-            column: column as i32,
-            prev_move,
+            board: *simulation_state,
+            left: get_cell_with_bounds_check(simulation_state, Some(row), column.checked_sub(1)),
+            right: get_cell_with_bounds_check(simulation_state, Some(row), column.checked_add(1)),
+            down: get_cell_with_bounds_check(simulation_state, row.checked_add(1), Some(column)),
+            current: get_cell_with_bounds_check(simulation_state, Some(row), Some(column))
+                .expect("current should be a valid cell"),
+            row,
+            column,
         };
 
         for possible_action in possible_actions {
