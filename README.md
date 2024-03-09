@@ -7,7 +7,7 @@ visualized via [macroquad](https://macroquad.rs/).
 
 Code was optimized for readability and extensibility over performance.
 
-Try this project in your browser via WebAssembly: https://phantomgoose.github.io/automata
+Try this project in your browser via WebAssembly (WASM): https://phantomgoose.github.io/automata
 
 Run this project with `cargo run --release` for best performance.
 
